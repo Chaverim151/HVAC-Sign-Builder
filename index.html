@@ -79,6 +79,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
 .savedcode{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-left:4px solid var(--aed);border-radius:8px;padding:10px 14px;margin:0 0 14px;font-size:.92rem}
 .savedcode .savedbtns{display:flex;gap:14px}
 .savedcode .linkbtn{margin:0}
+.grecaptcha-badge{visibility:hidden}
 .share{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px 6px;margin:0 0 14px}
 .share h3{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0 0 10px}
 .share label{display:block;font-weight:600;font-size:.88rem;margin-bottom:6px}
@@ -417,19 +418,13 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
         <span class="hint" style="font-size:.8rem">Numbers, # and *. For keys pressed together, use brackets: [4+5]</span>
       </div>
       <div id="codeShareWrap" hidden>
-        <div class="row">
-          <div class="field">
-            <label for="kName">Contact name</label>
-            <input id="kName" name="kName" placeholder="Dana Levi" maxlength="40" autocomplete="name">
-          </div>
-          <div class="field">
-            <label for="kRole">Their role</label>
-            <input id="kRole" name="kRole" placeholder="Manager" maxlength="30" autocomplete="off">
-          </div>
+        <div class="field">
+          <label for="kName">Contact name</label>
+          <input id="kName" name="kName" placeholder="Dana Levi" maxlength="40" autocomplete="name">
         </div>
         <div class="row">
           <div class="field">
-            <label for="kPhone">Cell phone <span class="hint">(gets a text)</span></label>
+            <label for="kPhone">Cell phone</label>
             <input id="kPhone" name="kPhone" placeholder="732-555-0123" inputmode="tel" maxlength="14" autocomplete="tel">
           </div>
           <div class="field">
@@ -439,7 +434,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
         </div>
         <button type="button" class="linkbtn" id="kSameAsContact" hidden>Use the building contact</button>
         <label class="check"><input type="checkbox" id="kConsent"> I'm authorized to share this code with Hatzolah</label>
-        <p class="note" style="margin:0 0 12px">After you press Generate, we'll text a 6-digit number to this phone to confirm it's really you.</p>
+        <label class="check"><input type="checkbox" id="kUpdates"> Text me updates about this code</label>
+        <p class="note" id="kUpdatesNote" style="margin:-4px 0 12px 24px" hidden>After you press Generate, we'll text a 6-digit number to confirm your phone. Then we'll text you when Hatzolah approves or declines the code.</p>
+        <p class="note" id="captchaWrap" hidden style="margin:-4px 0 12px 24px;font-size:.76rem">This site is protected by reCAPTCHA and the Google <a href="https://policies.google.com/privacy" target="_blank" rel="noopener">Privacy Policy</a> and <a href="https://policies.google.com/terms" target="_blank" rel="noopener">Terms of Service</a> apply.</p>
       </div>
       <input type="hidden" id="placeLat"><input type="hidden" id="placeLng"><input type="hidden" id="placeId">
     </div>
@@ -557,6 +554,10 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   const CODES_API = 'https://us-central1-hvac-ops.cloudfunctions.net/codesApi';
   const IS_TEST = new URLSearchParams(location.search).get('test') === '1';   // ?test=1 → shows as TEST in the CD, never goes live
   const codeValue = () => val('codeVal');
+  // Google reCAPTCHA v3 (invisible, score-based), used when the contact doesn't ask for texts.
+  // Site Key from google.com/recaptcha/admin ("Hatzolah Sign Builder"). This key is public by design;
+  // the Secret Key stays only with codesApi. Empty = the check is switched off.
+  const RECAPTCHA_SITE_KEY = '6LczheEtAAAAAITJpyyXXqGcAQR4V9PSDSU81ymA';
 
   // The AED and the bleeding control kit ask the same questions; these list each one's boxes and wording
   const KITS = [
@@ -613,6 +614,10 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     $('cRoleCustomWrap').hidden = $('cRole').value !== '__custom';
     $('codeShareWrap').hidden = !codeValue();
     $('kSameAsContact').hidden = home || !val('cName') || (val('kName') === val('cName') && val('kPhone') === val('cPhone'));
+    $('kUpdatesNote').hidden = !$('kUpdates').checked;
+    const needCaptcha = !!RECAPTCHA_SITE_KEY && !!codeValue() && !$('kUpdates').checked;
+    $('captchaWrap').hidden = !needCaptcha;
+    if (needCaptcha) loadCaptcha().catch(() => {});   // load early so the check is ready by Generate; a failure is reported at send time
     $('sameAsAed').hidden = !(radio('aed') === 'yes' && val('aedWhere')) || val('bleedWhere') === val('aedWhere');
 
     // Only warn once the person has left the box, so it doesn't nag while they search for a place by name
@@ -686,6 +691,27 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     $('printBtn').focus({preventScroll:true});
   });
 
+  /* ---------- "Are you a person" check (Google reCAPTCHA v3, invisible) ---------- */
+  let captchaReady = null;
+  function loadCaptcha(){
+    if (captchaReady) return captchaReady;
+    captchaReady = new Promise((resolve, reject) => {
+      const sc = document.createElement('script');
+      sc.src = 'https://www.google.com/recaptcha/api.js?render=' + encodeURIComponent(RECAPTCHA_SITE_KEY);
+      sc.async = true;
+      sc.onload = () => window.grecaptcha.ready(resolve);
+      sc.onerror = () => { captchaReady = null; reject(new Error('load')); };
+      document.head.appendChild(sc);
+    });
+    return captchaReady;
+  }
+  // A fresh token for each send (tokens expire after 2 minutes and work once)
+  async function getCaptchaToken(){
+    if (!RECAPTCHA_SITE_KEY) return '';
+    await loadCaptcha();
+    return window.grecaptcha.execute(RECAPTCHA_SITE_KEY, { action: 'submit_code' });
+  }
+
   /* ---------- Share the door code with Hatzolah (codesApi; never printed) ---------- */
   // A status link is this same page with ?code=<id>&t=<statusToken>. The token only lets someone see the
   // status or withdraw; the server never sends the door code back.
@@ -723,7 +749,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   const shownPhone = () => esc(val('kPhone'));
   // Which form box an API field name belongs to
   const FIELD_BOX = { 'building.address':'street', 'building.town':'town', 'building.zip':'zip', 'building.name':'place',
-    'code.value':'codeVal', 'contact.name':'kName', 'contact.role':'kRole', 'contact.phone':'kPhone', 'contact.email':'kEmail', 'consent.authorized':'kConsent' };
+    'code.value':'codeVal', 'contact.name':'kName', 'contact.phone':'kPhone', 'contact.email':'kEmail', 'consent.authorized':'kConsent' };
   function explain(e){
     const parts = Object.keys(e.fields || {}).map(f => esc(f.replace(/^\w+\./, '')) + ': ' + esc(e.fields[f]));
     return esc(e.message) + (parts.length ? '<br>' + parts.join('<br>') : '') +
@@ -731,7 +757,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   }
   function payloadKey(){
     return JSON.stringify([radio('kind'), val('place'), val('street'), val('unit'), val('town'), val('zip'), val('entrance'), val('notes'),
-      codeValue(), val('kName'), val('kRole'), val('kPhone'), val('kEmail')]);
+      codeValue(), val('kName'), val('kPhone'), val('kEmail'), $('kUpdates').checked]);
   }
 
   function startShare(){
@@ -741,7 +767,8 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     if (share.sub && key === share.key) { refreshStatus(); return; }   // already sent; nothing changed
     share.key = key; share.sub = null; share.idem = ''; share.verificationId = '';
     show('doneStep', false); stopPoll();
-    sendVerification();
+    if ($('kUpdates').checked) sendVerification();
+    else { show('verifyStep', false); submitShare(); }   // no text: send the code straight away
   }
   async function sendVerification(){
     show('verifyStep', false);
@@ -758,8 +785,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     }
   }
   async function submitShare(){
+    const verified = $('kUpdates').checked;
     const digits6 = $('verifyCode').value.replace(/\D/g, '');
-    if (digits6.length !== 6) { setStatus('bad', 'Please type all 6 digits from the text message.'); $('verifyCode').focus(); return; }
+    if (verified && digits6.length !== 6) { setStatus('bad', 'Please type all 6 digits from the text message.'); $('verifyCode').focus(); return; }
     if (!share.idem) share.idem = (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + Math.random().toString(16).slice(2));
     const home = isHome();
     const lat = parseFloat(val('placeLat')), lng = parseFloat(val('placeLng'));
@@ -775,12 +803,19 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
       section: radio('kind') === 'shul' ? 'shuls' : 'buildings',
       building,
       code: { value: codeValue() },
-      contact: { name: val('kName'), role: val('kRole'), phone: val('kPhone'), email: val('kEmail') },
+      contact: { name: val('kName'), phone: val('kPhone'), email: val('kEmail') },
       consent: { authorized: true },
-      verificationId: share.verificationId,
-      verificationCode: digits6,
+      updates: verified,          // the contact asked to be texted about this code
       test: IS_TEST
     };
+    if (verified) { body.verificationId = share.verificationId; body.verificationCode = digits6; }
+    else {
+      try { body.captchaToken = await getCaptchaToken(); }
+      catch (e) {
+        setStatus('bad', '<b>Not sent.</b> The "are you a person" check couldn\'t load. Check your internet connection, or tick <b>Text me updates</b> to confirm by text instead.');
+        return;
+      }
+    }
     $('verifyBtn').disabled = true;
     setStatus('wait', 'Sending to Hatzolah…');
     try {
@@ -791,7 +826,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
       show('verifyStep', false); show('doneStep', true);
       const extra = r.possibleExisting ? ' Hatzolah already has a code for this address, so a dispatcher will compare them.' : '';
       setStatus('ok', '<b>' + (r.updated ? 'Updated your waiting code.' : 'Sent to Hatzolah for approval.') + '</b>' + (r.test ? ' (TEST — it will never go live.)' : '') +
-        ' A dispatcher will check it and may call you. You\'ll get a text when they decide.' + extra +
+        ' A dispatcher will check it and may call you.' + (verified ? ' You\'ll get a text when they decide.' : '') + extra +
         '<p class="status-line">Status: <b id="subStatus">Waiting for approval</b></p>' +
         '<p class="status-line">To check later, save this link: <a href="' + esc(link) + '" target="_blank" rel="noopener" id="statusLink">status of this door code</a> ' +
         '<button type="button" class="linkbtn" data-act="copylink" style="margin:0">Copy link</button></p>');
@@ -800,6 +835,16 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
       // A real answer from the server ends this attempt: the next try is a new submission with a new key.
       // Only a dropped connection or a server error is retried with the same key (so it can't create two).
       if (e.code !== 'server_error' && e.code !== 'network') share.idem = '';
+      if ((e.code === 'captcha_failed' || e.code === 'captcha_required') && !verified) {
+        setStatus('bad', '<b>Not sent.</b> The "are you a person" check didn\'t go through. <button type="button" class="linkbtn" data-act="submit" style="margin:0">Try again</button>, or tick <b>Text me updates</b> to confirm by text instead.');
+        return;
+      }
+      if (e.code === 'verification_required' && !verified) {
+        // Hatzolah currently requires a confirmed phone for every code
+        setStatus('bad', '<b>Not sent yet.</b> Hatzolah needs to confirm the phone number before it can accept a door code. ' +
+          '<button type="button" class="linkbtn" data-act="optin" style="margin:0">Text me a 6-digit number</button>');
+        return;
+      }
       if (/^verification_/.test(e.code)) {
         const locked = e.code === 'verification_locked' || e.code === 'verification_expired' || e.code === 'verification_mismatch';
         setStatus('bad', explain(e) + (locked ? ' Press <b>Text me a new number</b>.' : ''));
@@ -868,6 +913,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     if (a === 'resend') sendVerification();
     if (a === 'submit') submitShare();
     if (a === 'copylink') copyText(statusLink(share.sub), e.target);
+    if (a === 'optin') { $('kUpdates').checked = true; share.key = payloadKey(); share.idem = ''; sendVerification(); }
   });
   $('editBtn').addEventListener('click', () => {
     $('resultView').hidden = true;
@@ -891,7 +937,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   $('bleedKeyPhone').addEventListener('input', phoneFormat);
   $('kPhone').addEventListener('input', phoneFormat);
   $('kSameAsContact').addEventListener('click', () => {
-    $('kName').value = val('cName'); $('kRole').value = roleText(); $('kPhone').value = val('cPhone'); updateForm();
+    $('kName').value = val('cName'); $('kPhone').value = val('cPhone'); updateForm();
   });
   // A typed address no longer matches Google's pin
   $('street').addEventListener('input', () => { $('placeLat').value = ''; $('placeLng').value = ''; $('placeId').value = ''; });
