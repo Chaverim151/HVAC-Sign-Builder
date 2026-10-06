@@ -556,8 +556,8 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     <div class="msg" data-msg hidden></div>
     <div class="field">
       <label for="codeVal">Door, gate or lockbox code</label>
-      <input id="codeVal" name="codeVal" placeholder="#1602" maxlength="40" autocomplete="off" inputmode="text">
-      <span class="hint" style="font-size:.8rem">Numbers, # and *. For keys pressed together, use brackets: [4+5]</span>
+      <input id="codeVal" name="codeVal" placeholder="#1602 or A1234" maxlength="40" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text">
+      <span class="hint" style="font-size:.8rem">Letters, numbers, # and *. For keys pressed together, use brackets: [4+5]</span>
     </div>
     <div class="row">
       <div class="field">
@@ -733,7 +733,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     if (loc.length) list.push(['cardCodeAddr', 'Please add ' + loc.join(' and ') + '.', !val('aStreet') ? 'aStreet' : 'aTown']);
     else if (!/^\d/.test(val('aStreet'))) list.push(['cardCodeAddr', 'The street address must start with the building number, like "12 Oak St".', 'aStreet']);
     if (!codeValue()) list.push(['cardCodeVal', 'Please type the access code.', 'codeVal']);
-    else if (!/^[0-9#*\[\]+\-\s]{1,40}$/.test(codeValue())) list.push(['cardCodeVal', 'The code can only have numbers, # and *, with [ ] around keys pressed together, like [4+5].', 'codeVal']);
+    else if (!/^[0-9A-Za-z#*\[\]+\-\s]{1,40}$/.test(codeValue())) list.push(['cardCodeVal', 'The code can only have letters, numbers, # and *, with [ ] around keys pressed together, like [4+5].', 'codeVal']);
     const miss = (msg, field) => list.push(['cardCodeContact', msg, field]);
     if (!val('kName')) miss('Please add the contact name.', 'kName');
     else if (val('kPhone').replace(/\D/g,'').length !== 10) miss('Please add a 10-digit cell phone, like 732-555-0123.', 'kPhone');
