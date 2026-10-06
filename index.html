@@ -32,7 +32,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
 /* ---------- Header ---------- */
 .head{display:flex;align-items:center;gap:14px;margin-bottom:18px}
 .tabs{display:flex;gap:4px;border-bottom:2px solid var(--line);margin:0 0 18px}
-.tabs button{font:inherit;font-weight:700;font-size:1rem;padding:10px 16px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
+.tabs button{font:inherit;flex:1 1 auto;line-height:1.25;text-align:center;font-weight:700;font-size:1rem;padding:10px 16px;border:0;background:none;color:var(--muted);cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px}
 .tabs button[aria-selected="true"]{color:var(--red);border-bottom-color:var(--red)}
 .tabs button:focus-visible{outline:2px solid var(--red);outline-offset:2px;border-radius:4px}
 @media (max-width:420px){.tabs button{padding:10px 10px;font-size:.92rem}}
@@ -211,8 +211,8 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
 </header>
 
 <nav class="tabs" role="tablist" aria-label="What do you want to do?">
-  <button type="button" role="tab" id="tabSign" aria-controls="signPanel" aria-selected="true">Sign builder</button>
-  <button type="button" role="tab" id="tabCode" aria-controls="codePanel" aria-selected="false" tabindex="-1">Emergency access code</button>
+  <button type="button" role="tab" id="tabSign" aria-controls="signPanel" aria-selected="true">Emergency Sign Maker</button>
+  <button type="button" role="tab" id="tabCode" aria-controls="codePanel" aria-selected="false" tabindex="-1">Emergency Access Code Submission Form</button>
 </nav>
 
 <div id="signPanel" role="tabpanel" aria-labelledby="tabSign">
@@ -416,7 +416,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
       </div>
     </div>
     <div class="tip">Have a door or gate code? Don't put it on the sign. Share it privately with Hatzolah in the
-      <button type="button" class="linkbtn" data-goto="code" style="margin:0;font-size:inherit">Emergency access code</button> tab.</div>
+      <button type="button" class="linkbtn" data-goto="code" style="margin:0;font-size:inherit">Emergency Access Code Submission Form</button> tab.</div>
   </section>
 
   <!-- Card 5: Sign options -->
@@ -666,6 +666,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     // A home sign shows just the address: no AED or bleeding control kit questions
     $('cardAed').hidden = home;
     $('cardBleed').hidden = home;
+    $('cardAccess').hidden = home;
     $('unitLbl').innerHTML = (home ? 'Apt' : 'Suite / Floor') + ' <span class="hint">(optional)</span>';
     $('unit').placeholder = home ? '2B' : 'Suite 200';
     // Renumber the cards so the numbers stay in order when the contact card is hidden
@@ -776,7 +777,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   /* ---------- Tabs ---------- */
   const TABS = {
     sign: { tab: 'tabSign', panel: 'signPanel', title: 'Emergency Sign Maker', lead: 'Fill in the cards below, then press Generate. You\'ll get a sign to print and post by the phone.' },
-    code: { tab: 'tabCode', panel: 'codePanel', title: 'Emergency Access Code', lead: 'Share a building\'s door, gate or lockbox code privately with Hatzolah dispatch, so responders can get in fast.' }
+    code: { tab: 'tabCode', panel: 'codePanel', title: 'Emergency Access Code Submission Form', lead: 'Share a building\'s door, gate or lockbox code privately with Hatzolah dispatch, so responders can get in fast.' }
   };
   function showTab(name, focusTab){
     Object.keys(TABS).forEach(k => {
@@ -1171,9 +1172,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     $('sLine1').textContent = l1;
     $('sLine2').textContent = l2;
     const setExtra = (id, html) => { $(id).hidden = !html; $(id).innerHTML = html || ''; };
-    setExtra('sEntrance', val('entrance') ? 'EMS entrance: <b>' + esc(val('entrance')) + '</b>' : '');
-    setExtra('sCross', val('cross') ? 'Near <b>' + esc(val('cross')) + '</b>' : '');
-    setExtra('sNotes', val('notes') ? esc(val('notes')) : '');
+    setExtra('sEntrance', !home && val('entrance') ? 'EMS entrance: <b>' + esc(val('entrance')) + '</b>' : '');
+    setExtra('sCross', !home && val('cross') ? 'Near <b>' + esc(val('cross')) + '</b>' : '');
+    setExtra('sNotes', !home && val('notes') ? esc(val('notes')) : '');
 
     // AED and bleeding control kit boxes
     KITS.forEach(K => {
