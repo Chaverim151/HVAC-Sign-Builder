@@ -685,7 +685,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
         headers: Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {}),
         body: opts.body ? JSON.stringify(opts.body) : undefined });
     } catch (e) {
-      const err = new Error('Couldn\'t reach Hatzolah. Check your internet connection. If you opened this page from a file on your computer, open it from the Hatzolah website instead.');
+      const err = new Error(location.protocol === 'file:'
+        ? 'Code sharing only works when this page is opened from the Hatzolah website, not from a file saved on a computer. Your sign is fine and you can print it.'
+        : 'Hatzolah\'s code-sharing service isn\'t answering right now. Your sign is fine and you can print it. Please try sharing the code again later.');
       err.code = 'network'; throw err;
     }
     const j = await r.json().catch(() => ({}));
@@ -733,7 +735,7 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
       show('verifyStep', true); $('verifyCode').value = ''; $('verifyCode').focus({ preventScroll: true });
     } catch (e) {
       const wait = e.retryAfter ? ' Try again in about ' + Math.ceil(e.retryAfter / 60) + ' minute(s).' : '';
-      setStatus('bad', '<b>We couldn\'t text that phone.</b> ' + explain(e) + wait + ' <button type="button" class="linkbtn" data-act="resend" style="margin:0">Try again</button>');
+      setStatus('bad', (e.code === 'network' ? '<b>The door code wasn\'t sent.</b> ' : '<b>We couldn\'t text that phone.</b> ') + explain(e) + wait + ' <button type="button" class="linkbtn" data-act="resend" style="margin:0">Try again</button>');
     }
   }
   async function submitShare(){
