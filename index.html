@@ -76,6 +76,9 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
 .codebox{position:relative;border:1px dashed var(--line);border-radius:8px;padding:12px 12px 2px;margin:0 0 14px;background:#FBFAFA}
 .codenote{margin:2px 0 10px;font-size:.84rem;color:var(--muted);line-height:1.4}
 .codenote b{color:var(--ink)}
+.savedcode{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--line);border-left:4px solid var(--aed);border-radius:8px;padding:10px 14px;margin:0 0 14px;font-size:.92rem}
+.savedcode .savedbtns{display:flex;gap:14px}
+.savedcode .linkbtn{margin:0}
 .share{background:#fff;border:1px solid var(--line);border-radius:10px;padding:14px 16px 6px;margin:0 0 14px}
 .share h3{font-family:var(--display);font-weight:600;font-size:1.1rem;margin:0 0 10px}
 .share label{display:block;font-weight:600;font-size:.88rem;margin-bottom:6px}
@@ -199,6 +202,14 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     <div>
       <h1>Emergency Sign Maker</h1>
       <p>Fill in the cards below, then press Generate. You'll get a sign to print and post by the phone.</p>
+    </div>
+  </div>
+
+  <div class="savedcode" id="savedCode" hidden role="status">
+    <div><b>Your door code<span id="savedLabel"></span>:</b> <span id="savedStatus">checking…</span></div>
+    <div class="savedbtns">
+      <button type="button" class="linkbtn" id="savedWithdraw" hidden>Withdraw it</button>
+      <button type="button" class="linkbtn" id="savedHide">Hide</button>
     </div>
   </div>
 
@@ -676,6 +687,14 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   });
 
   /* ---------- Share the door code with Hatzolah (codesApi; never printed) ---------- */
+  // A status link is this same page with ?code=<id>&t=<statusToken>. The token only lets someone see the
+  // status or withdraw; the server never sends the door code back.
+  function statusLink(sub){ return location.origin + location.pathname + '?code=' + encodeURIComponent(sub.id) + '&t=' + encodeURIComponent(sub.token); }
+  function copyText(text, btn){
+    const done = () => { const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => { btn.textContent = old; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).then(done, () => window.prompt('Copy this link:', text));
+    else window.prompt('Copy this link:', text);
+  }
   const share = { key: '', verificationId: '', idem: '', sub: null, poll: null, resendAt: 0 };
   async function api(path, opts){
     opts = opts || {};
@@ -766,15 +785,21 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
     setStatus('wait', 'Sending to Hatzolah…');
     try {
       const r = await api('/v1/code-submissions', { method: 'POST', headers: { 'Idempotency-Key': share.idem }, body });
-      share.sub = { id: r.id, token: r.statusToken, test: r.test };
+      share.sub = { id: r.id, token: r.statusToken, test: r.test, label: building.name + ', ' + building.address };
       try { localStorage.setItem('hzCodeSub', JSON.stringify(share.sub)); } catch (e) {}
+      const link = statusLink(share.sub);
       show('verifyStep', false); show('doneStep', true);
       const extra = r.possibleExisting ? ' Hatzolah already has a code for this address, so a dispatcher will compare them.' : '';
       setStatus('ok', '<b>' + (r.updated ? 'Updated your waiting code.' : 'Sent to Hatzolah for approval.') + '</b>' + (r.test ? ' (TEST — it will never go live.)' : '') +
         ' A dispatcher will check it and may call you. You\'ll get a text when they decide.' + extra +
-        '<p class="status-line">Status: <b id="subStatus">Waiting for approval</b></p>');
+        '<p class="status-line">Status: <b id="subStatus">Waiting for approval</b></p>' +
+        '<p class="status-line">To check later, save this link: <a href="' + esc(link) + '" target="_blank" rel="noopener" id="statusLink">status of this door code</a> ' +
+        '<button type="button" class="linkbtn" data-act="copylink" style="margin:0">Copy link</button></p>');
       startPoll();
     } catch (e) {
+      // A real answer from the server ends this attempt: the next try is a new submission with a new key.
+      // Only a dropped connection or a server error is retried with the same key (so it can't create two).
+      if (e.code !== 'server_error' && e.code !== 'network') share.idem = '';
       if (/^verification_/.test(e.code)) {
         const locked = e.code === 'verification_locked' || e.code === 'verification_expired' || e.code === 'verification_mismatch';
         setStatus('bad', explain(e) + (locked ? ' Press <b>Text me a new number</b>.' : ''));
@@ -813,13 +838,36 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
   $('resendBtn').addEventListener('click', () => {
     const wait = Math.ceil((share.resendAt - Date.now()) / 1000);
     if (wait > 0) { setStatus('wait', 'Please wait ' + wait + ' seconds before asking for a new number.'); return; }
+    share.idem = '';
     sendVerification();
   });
   $('withdrawBtn').addEventListener('click', withdrawShare);
+
+  // On opening: show the status of a code from a status link, or the last one sent from this device
+  (function showSavedCode(){
+    const q = new URLSearchParams(location.search);
+    let sub = null;
+    if (q.get('code') && q.get('t')) sub = { id: q.get('code'), token: q.get('t'), label: '' };
+    else { try { sub = JSON.parse(localStorage.getItem('hzCodeSub') || 'null'); } catch (e) {} }
+    if (!sub || !sub.id || !sub.token) return;
+    $('savedLabel').textContent = sub.label ? ' for ' + sub.label : '';
+    show('savedCode', true);
+    api('/v1/code-submissions/' + encodeURIComponent(sub.id) + '?t=' + encodeURIComponent(sub.token)).then(st => {
+      $('savedStatus').textContent = (STATUS_TEXT[st.status] || st.status) + (st.reason ? ': ' + st.reason : '') + (st.test ? ' (TEST)' : '');
+      show('savedWithdraw', st.status === 'pending');
+    }).catch(e => { $('savedStatus').textContent = e.code === 'not_found' ? 'This status link isn\'t valid any more.' : 'Couldn\'t check right now.'; });
+    $('savedWithdraw').addEventListener('click', () => {
+      api('/v1/code-submissions/' + encodeURIComponent(sub.id) + '/withdraw', { method: 'POST', body: { statusToken: sub.token } })
+        .then(() => { $('savedStatus').textContent = STATUS_TEXT.withdrawn; show('savedWithdraw', false); })
+        .catch(e => { $('savedStatus').textContent = e.message; });
+    });
+    $('savedHide').addEventListener('click', () => { show('savedCode', false); try { localStorage.removeItem('hzCodeSub'); } catch (e) {} });
+  })();
   $('sharePanel').addEventListener('click', e => {
     const a = e.target.getAttribute && e.target.getAttribute('data-act');
     if (a === 'resend') sendVerification();
     if (a === 'submit') submitShare();
+    if (a === 'copylink') copyText(statusLink(share.sub), e.target);
   });
   $('editBtn').addEventListener('click', () => {
     $('resultView').hidden = true;
