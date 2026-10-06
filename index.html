@@ -185,13 +185,15 @@ body{margin:0;background:var(--ground);color:var(--ink);font-family:var(--body);
 .pac-container{font-family:var(--body);border-radius:6px;margin-top:2px;z-index:1000}
 .pac-item{padding:6px 10px;font-size:.92rem;cursor:pointer}
 
-@page{size:letter portrait;margin:.5in}
+/* Margin 0 tells the browser there's no room for its own header/footer (web address, date, page 1/1).
+   The white border comes from padding instead. */
+@page{size:letter portrait;margin:0}
 @media print{
   body{background:#fff}
   #formView,.resultbar,.pac-container,.share,.tabs,.head,#codePanel{display:none!important}
   #signPanel{display:block!important}
   #resultView{display:block!important}
-  .wrap{max-width:none;padding:0}
+  .wrap{max-width:none;padding:.55in 0 0}
   html,body{height:auto!important;margin:0!important}
   .preview-wrap{overflow:visible}
   .sign{box-shadow:none;margin:0 auto;zoom:1;break-inside:avoid;page-break-inside:avoid;page-break-after:avoid;-webkit-print-color-adjust:exact;print-color-adjust:exact}
